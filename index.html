@@ -109,6 +109,11 @@
   .chips::-webkit-scrollbar{display:none}
   .chip{flex:none;white-space:nowrap;padding:8px 12px;border-radius:999px;border:1px solid #EFE2D6;background:#fff;color:#7C6555;font-size:12px;font-weight:700;letter-spacing:-.01em;cursor:pointer}
   .chip.active{background:#3A2A20;border-color:#3A2A20;color:#fff}
+  .chip.fav{color:#A97B18;border-color:#EFDDB4;background:#FDF8EA}
+  .chip.fav.active{background:#DCA83E;border-color:#DCA83E;color:#fff}
+  .fav-hd{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:#8A7568;letter-spacing:-.01em}
+  .fav-hd .star-ic{color:#DCA83E;display:grid;place-items:center}
+  .fav-hd .star-ic svg{width:16px;height:16px;fill:#F2C86A;stroke:#DCA83E}
   .fridge-sum{margin-top:11px;padding-top:11px;border-top:1px solid #F7EEE6;font-size:11.5px;font-weight:600;color:#A69384;letter-spacing:-.01em}
   .fridge-sum b{color:#7A5F4C;font-weight:800}
   .itemlist{display:flex;flex-direction:column;gap:8px}
@@ -182,10 +187,17 @@
   .note{font-size:11px;font-weight:600;line-height:1.65;color:#A69384;margin:10px 2px 0;word-break:keep-all}
 
   /* ── tab bar ── */
-  .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:grid;grid-template-columns:repeat(5,1fr);gap:2px;padding:7px 6px calc(7px + env(safe-area-inset-bottom));background:rgba(255,255,255,.97);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid #F2E6DA;z-index:30}
-  .tab{border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 0 4px;color:#B3A296;font-size:10.5px;font-weight:700;letter-spacing:-.02em;cursor:pointer}
-  .tab .ic{width:42px;height:26px;border-radius:999px;display:grid;place-items:center;transition:background .15s ease}
+  .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:2px;padding:7px 6px calc(7px + env(safe-area-inset-bottom));background:rgba(255,255,255,.97);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid #F2E6DA;z-index:30}
+  .tab{border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 0 4px;color:#B3A296;font-size:10.5px;font-weight:700;letter-spacing:-.02em;cursor:pointer;min-width:0}
+  .tab .ic{width:40px;height:26px;border-radius:999px;display:grid;place-items:center;transition:background .15s ease}
   .tab svg{width:20px;height:20px}
+  .tab > span:last-child{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  @media (max-width:400px){
+    .tabbar{gap:1px;padding-left:5px;padding-right:5px}
+    .tab{font-size:10px;letter-spacing:-.035em}
+    .tab .ic{width:36px;height:24px}
+    .tab svg{width:19px;height:19px}
+  }
   .tab.active{color:#C86D44}
   .tab.active .ic{background:#FBEBDF}
 
@@ -269,6 +281,7 @@
   var TABS = [
     { id: 'meals', label: '주간 식단', icon: ICON.meals },
     { id: 'fridge', label: '냉장고 재고', icon: ICON.fridge },
+    { id: 'fav', label: '즐겨찾기', icon: ICON.star },
     { id: 'shopping', label: '장볼 목록', icon: ICON.basket },
     { id: 'ledger', label: '가계부', icon: ICON.receipt },
     { id: 'summary', label: '장보기 요약', icon: ICON.chart }
@@ -389,7 +402,7 @@
   }
 
   /* ───────── state ───────── */
-  var state, tab = 'meals', catFilter = '전체', search = '', firstRun = false;
+  var state, tab = 'meals', catFilter = '전체', favOnly = false, search = '', firstRun = false;
 
   function normalize(raw) {
     var s = raw && typeof raw === 'object' ? raw : {};
@@ -551,6 +564,20 @@
     return h;
   }
 
+  /* ── 즐겨찾기 정렬 ── */
+  function favCount() {
+    return state.items.filter(function (i) { return !!i.fav; }).length;
+  }
+  /* 즐겨찾기(★)가 켜진 품목을 항상 위로, 나머지는 등록 순서 그대로 */
+  function favFirst(list) {
+    return list.map(function (x, i) { return { x: x, i: i }; })
+      .sort(function (a, b) {
+        var d = (b.x.fav ? 1 : 0) - (a.x.fav ? 1 : 0);
+        return d || (a.i - b.i);
+      })
+      .map(function (o) { return o.x; });
+  }
+
   /* ── 냉장고 재고 ── */
   function viewFridge() {
     var counts = {};
@@ -558,9 +585,10 @@
       counts[c] = state.items.filter(function (i) { return i.cat === c; }).length;
     });
     var m = metrics();
-    var chips = '<button type="button" class="chip' + (catFilter === '전체' ? ' active' : '') + '" data-act="cat" data-val="전체">전체 ' + state.items.length + '</button>' +
+    var chips = '<button type="button" class="chip' + (catFilter === '전체' && !favOnly ? ' active' : '') + '" data-act="cat" data-val="전체">전체 ' + state.items.length + '</button>' +
+      '<button type="button" class="chip fav' + (favOnly ? ' active' : '') + '" data-act="cat" data-val="__fav" aria-pressed="' + favOnly + '">★ 즐겨찾기 (' + favCount() + ')</button>' +
       CATS.map(function (c) {
-        return '<button type="button" class="chip' + (catFilter === c ? ' active' : '') + '" data-act="cat" data-val="' + c + '">' + c + ' ' + counts[c] + '</button>';
+        return '<button type="button" class="chip' + (catFilter === c && !favOnly ? ' active' : '') + '" data-act="cat" data-val="' + c + '">' + c + ' ' + counts[c] + '</button>';
       }).join('');
 
     return '<section class="card">' +
@@ -577,39 +605,63 @@
       '</div>';
   }
 
+  function itemCard(i) {
+    var used = i.status === 'used';
+    var staple = !!i.staple;
+    var label = staple ? (used ? '떨어짐' : '보유 중') : (used ? '소진' : '보유');
+    return '<div class="item-card' + (used ? ' used' : '') + '">' +
+      '<button type="button" class="star' + (i.fav ? ' on' : '') + '" data-act="item:fav" data-id="' + i.id + '" aria-label="즐겨찾기" aria-pressed="' + !!i.fav + '">' + ICON.star + '</button>' +
+      '<div class="item-main">' +
+        '<div class="item-name">' + esc(i.name) + '</div>' +
+        '<div class="item-meta">' + (i.qty ? esc(i.qty) + ' · ' : '') + priceText(i.price) +
+          '<span class="tag">' + esc(i.cat) + '</span>' +
+          (staple ? '<span class="tag staple">상비품</span>' : '') +
+          (i.boughtAt ? '<span class="tag">' + shortDate(i.boughtAt) + ' 구매</span>' : '') + '</div>' +
+        (i.memo ? '<div class="item-memo">' + esc(i.memo) + '</div>' : '') +
+      '</div>' +
+      '<div class="item-side">' +
+        '<button type="button" class="pill ' + (used ? 'used' : (staple ? 'staple' : 'owned')) + '" data-act="item:toggle" data-id="' + i.id + '">' + label + '</button>' +
+        '<div class="mini">' +
+          '<button type="button" class="icon-btn" data-act="item:edit" data-id="' + i.id + '" aria-label="수정">' + ICON.pencil + '</button>' +
+          '<button type="button" class="icon-btn" data-act="item:del" data-id="' + i.id + '" aria-label="삭제">' + ICON.trash + '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
   function itemListHtml() {
     var q = search.trim().toLowerCase();
     var list = state.items.filter(function (i) {
-      if (catFilter !== '전체' && i.cat !== catFilter) return false;
+      if (favOnly) {
+        if (!i.fav) return false;
+      } else if (catFilter !== '전체' && i.cat !== catFilter) return false;
       if (q && String(i.name).toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
     if (!list.length) {
-      return '<div class="empty">' + (state.items.length ? '조건에 맞는 재료가 없어요.' : '냉장고가 비어 있어요.<br />아래 <b>+ 재료 추가</b>로 채워 보세요.') + '</div>';
+      var msg;
+      if (favOnly) msg = '자주 쓰는 품목의 ★을 눌러 즐겨찾기에 담아 보세요.';
+      else msg = state.items.length ? '조건에 맞는 재료가 없어요.' : '냉장고가 비어 있어요.<br />아래 <b>+ 재료 추가</b>로 채워 보세요.';
+      return '<div class="empty">' + msg + '</div>';
     }
-    return list.map(function (i) {
-      var used = i.status === 'used';
-      var staple = !!i.staple;
-      var label = staple ? (used ? '떨어짐' : '보유 중') : (used ? '소진' : '보유');
-      return '<div class="item-card' + (used ? ' used' : '') + '">' +
-        '<button type="button" class="star' + (i.fav ? ' on' : '') + '" data-act="item:fav" data-id="' + i.id + '" aria-label="즐겨찾기" aria-pressed="' + !!i.fav + '">' + ICON.star + '</button>' +
-        '<div class="item-main">' +
-          '<div class="item-name">' + esc(i.name) + '</div>' +
-          '<div class="item-meta">' + (i.qty ? esc(i.qty) + ' · ' : '') + priceText(i.price) +
-            '<span class="tag">' + esc(i.cat) + '</span>' +
-            (staple ? '<span class="tag staple">상비품</span>' : '') +
-            (i.boughtAt ? '<span class="tag">' + shortDate(i.boughtAt) + ' 구매</span>' : '') + '</div>' +
-          (i.memo ? '<div class="item-memo">' + esc(i.memo) + '</div>' : '') +
-        '</div>' +
-        '<div class="item-side">' +
-          '<button type="button" class="pill ' + (used ? 'used' : (staple ? 'staple' : 'owned')) + '" data-act="item:toggle" data-id="' + i.id + '">' + label + '</button>' +
-          '<div class="mini">' +
-            '<button type="button" class="icon-btn" data-act="item:edit" data-id="' + i.id + '" aria-label="수정">' + ICON.pencil + '</button>' +
-            '<button type="button" class="icon-btn" data-act="item:del" data-id="' + i.id + '" aria-label="삭제">' + ICON.trash + '</button>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-    }).join('');
+    return favFirst(list).map(itemCard).join('');
+  }
+
+  /* ── 즐겨찾기 ── */
+  function viewFav() {
+    var favs = favFirst(state.items.filter(function (i) { return !!i.fav; }));
+    var h = '<section class="card">' +
+        '<div class="fav-hd"><span class="star-ic">' + ICON.star + '</span>즐겨찾기 <span style="color:#B4653C">' + favs.length + '개</span></div>' +
+        '<div class="fridge-sum">자주 사는 품목을 모아 뒀어요. 즐겨찾기한 품목은 재고 목록에서도 맨 위에 먼저 나와요.</div>' +
+      '</section>';
+    if (!favs.length) {
+      return h +
+        '<div class="empty">자주 쓰는 품목의 ★을 눌러 즐겨찾기에 담아 보세요.</div>' +
+        '<button type="button" class="btn ghost" data-act="tab" data-val="fridge">냉장고 재고에서 ★ 누르기</button>';
+    }
+    h += '<div class="itemlist" id="itemList">' + favs.map(itemCard).join('') + '</div>';
+    h += '<button type="button" class="btn ghost" data-act="tab" data-val="fridge">냉장고 전체 보기</button>';
+    return h;
   }
 
   /* ── 장볼 목록 ── */
@@ -761,6 +813,7 @@
   var VIEWS = {
     meals: viewMeals,
     fridge: viewFridge,
+    fav: viewFav,
     shopping: viewShopping,
     ledger: viewLedger,
     summary: viewSummary
@@ -1099,7 +1152,13 @@
         break;
 
       case 'cat':
-        catFilter = a.dataset.val;
+        if (a.dataset.val === '__fav') {
+          favOnly = !favOnly;
+          if (favOnly) catFilter = '전체';
+        } else {
+          favOnly = false;
+          catFilter = a.dataset.val;
+        }
         document.getElementById('view').innerHTML = VIEWS[tab]();
         break;
 
