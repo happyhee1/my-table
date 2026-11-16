@@ -434,7 +434,11 @@
     /* 상비품(쌀·김·소금 등)은 개수·식대 계산에서 빼요 */
     var used = state.items.filter(function (i) { return i.status === 'used' && !i.staple; });
     var staples = state.items.filter(function (i) { return !!i.staple; });
+    /* 이번 달 식비 — 달이 바뀌면 자동으로 0원부터 다시 쌓여요 */
+    var thisMonth = ymd(new Date()).slice(0, 7);
+    var monthLedger = state.ledger.filter(function (l) { return String(l.date || '').slice(0, 7) === thisMonth; });
     var paid = sumOf(state.ledger, function (l) { return (Number(l.amount) || 0) - (Number(l.discount) || 0); });
+    var monthPaid = sumOf(monthLedger, function (l) { return (Number(l.amount) || 0) - (Number(l.discount) || 0); });
     var total = sumOf(state.items, function (i) { return i.price; });
     var usedCost = sumOf(used, function (i) { return i.price; });
     var perMeal = doneMeals.length ? Math.round(usedCost / doneMeals.length) : 0;
@@ -442,6 +446,10 @@
       days: days,
       weekMeals: wm.length,
       doneMeals: doneMeals.length,
+      month: thisMonth,
+      monthNo: Number(thisMonth.slice(5, 7)),
+      monthPaid: monthPaid,
+      monthCount: monthLedger.length,
       paid: paid,
       total: total,
       usedCost: usedCost,
@@ -471,13 +479,13 @@
         '<span class="sum-range">' + fmtMD(m.days[0]) + ' – ' + fmtMD(m.days[6]) + '</span>' +
       '</div>' +
       '<div class="sum-grid">' +
-        cell('실결제 금액', m.paid) +
-        cell('담은 품목', state.items.length, '건') +
+        cell(m.monthNo + '월 식비', m.monthPaid) +
+        cell('남은 재고', m.ownedCount, '개') +
         cell('이번 주 식단', m.weekMeals, '끼') +
       '</div>' +
       '<hr class="sum-sep" />' +
       '<div class="sum-grid second">' +
-        cell('총 구매비용', m.total) +
+        cell('남은 재고 가치', m.remainValue) +
         cell('소진비용', m.usedCost) +
         cell('끼니당 식대 (소진 ' + m.doneMeals + '끼)', m.perMeal) +
       '</div>';
@@ -644,7 +652,7 @@
     var weekSum = sumOf(state.ledger.filter(function (l) { return wk.indexOf(l.date) >= 0; }), function (l) { return (l.amount || 0) - (l.discount || 0); });
 
     var h = '<section class="card">' +
-      '<div class="led-sum">이번 달 식비 <b>' + nf(monthSum) + '원</b><span style="color:#DCCBBB">·</span>이번 주 <b>' + nf(weekSum) + '원</b></div>' +
+      '<div class="led-sum">' + Number(thisMonth.slice(5, 7)) + '월 식비 <b>' + nf(monthSum) + '원</b><span style="color:#DCCBBB">·</span>이번 주 <b>' + nf(weekSum) + '원</b></div>' +
       '<form class="inline-form" data-form="ledger" autocomplete="off">' +
         '<div class="row2">' +
           '<input class="input" type="date" name="date" value="' + ymd(now) + '" />' +
