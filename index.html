@@ -243,7 +243,7 @@
 (function () {
   'use strict';
 
-  var KEY = 'sohee_table_v1';
+  var KEY = 'sohee_table_v2';
   var CATS = ['해산물·육류', '채소·과일', '간편식·밀키트', '유제품·계란', '양념·곡류', '상비품·조미료', '음료·차·커피'];
   var SLOTS = ['아침', '점심', '저녁'];
   var DOW = ['일', '월', '화', '수', '목', '금', '토'];
@@ -315,25 +315,32 @@
     var mon = startOfWeek(today);
     function d(i) { return ymd(addDays(mon, i)); }
 
+    /* 실제 마켓컬리 주문내역(2026-11-13 · 10-09 · 10-01)과 네이버페이 구매(꿀고구마 · 쌀) 기준.
+       사과 · 그릭요거트 · 바디워시 · 바디로션 · 수딩크림은 빼 달라는 요청이라 넣지 않았어요. */
     var items = [
-      { name: '[대흥] 남해안 생굴 300g', qty: '300g', price: 12900, cat: '해산물·육류', status: 'used', fav: true, boughtAt: '2026-11-13', memo: '다 먹었어요 (월요일 굴밥)' },
+      { name: '[대흥] 남해안 생굴 300g', qty: '300g', price: 8590, cat: '해산물·육류', status: 'used', fav: true, boughtAt: '2026-11-13', memo: '다 먹었어요 (월요일 굴밥)' },
+      { name: '[KF365] 무항생제 1+등급란 XL(특란) 20구', qty: '20구 · 특란', price: 7399, cat: '유제품·계란', status: 'owned', fav: true, boughtAt: '2026-11-13', memo: '' },
+      { name: '[이연복의 목란] 백짬뽕 2인분', qty: '1인분 남음', price: 13485, cat: '간편식·밀키트', status: 'owned', fav: true, boughtAt: '2026-11-13', memo: '2인분 중 1인분 소진' },
+      { name: '[해찬들] 새콤달콤 초고추장 300g', qty: '300g', price: 2890, cat: '상비품·조미료', status: 'owned', fav: false, staple: true, boughtAt: '2026-11-13', memo: '' },
+      { name: '[다시다] 명품골드 쇠고기 96G', qty: '96g', price: 5700, cat: '상비품·조미료', status: 'owned', fav: false, staple: true, boughtAt: '2026-11-13', memo: '' },
+      { name: '[동원] 참치액 진 500g', qty: '500g', price: 3990, cat: '상비품·조미료', status: 'owned', fav: false, staple: true, boughtAt: '2026-11-13', memo: '' },
+      { name: '[커피빈] 캡틴 아메리카노 파우더 스틱(1.6g×50개)', qty: '50개입', price: 12960, cat: '음료·차·커피', status: 'owned', fav: false, staple: true, boughtAt: '2026-11-13', memo: '' },
+      { name: '[룸모] 스파게티', qty: '1봉', price: 5410, cat: '양념·곡류', status: 'owned', fav: false, staple: true, boughtAt: '2026-11-13', memo: '' },
+      { name: '[잇더핏] 더블초코맛 520g', qty: '520g', price: 34800, cat: '음료·차·커피', status: 'owned', fav: false, boughtAt: '2026-10-09', memo: '단백질쉐이크' },
+      { name: '[햇님마을] 고춧가루 (보통매운맛) 110g', qty: '110g', price: 6790, cat: '상비품·조미료', status: 'owned', fav: false, staple: true, boughtAt: '2026-10-01', memo: '' },
+      { name: '[자연실록] 동물복지 한입 닭가슴살 500g', qty: '500g', price: 8300, cat: '해산물·육류', status: 'owned', fav: false, boughtAt: '2026-10-01', memo: '' },
+      { name: '[베키아에누보] 바질토마토치즈 치아바타 샌드위치(3입)', qty: '3입', price: 11180, cat: '간편식·밀키트', status: 'owned', fav: false, boughtAt: '2026-10-01', memo: '' },
       { name: '서산 황토 꿀고구마 3kg', qty: '3kg', price: 14900, cat: '채소·과일', status: 'owned', fav: true, boughtAt: '2026-10-23', memo: '' },
       { name: '고시히카리 햅쌀 4kg', qty: '4kg', price: 24900, cat: '양념·곡류', status: 'owned', fav: false, staple: true, boughtAt: '2026-09-28', memo: '상비품 · 개수 안 세도 돼요' },
-      { name: '계란 20구', qty: '20구 · 특란', price: 7399, cat: '유제품·계란', status: 'owned', fav: false, boughtAt: '2026-11-13', memo: '' },
-      { name: '백짬뽕', qty: '1인분 남음', price: 0, cat: '간편식·밀키트', status: 'owned', fav: false, memo: '2인분 중 1개 소진' },
+      { name: '김', qty: '개수 나중에 확인', price: 0, cat: '양념·곡류', status: 'owned', fav: false, staple: true, memo: '유통기한 올해 9월까지 · 개수 나중에 확인' },
+      { name: '샤인머스캣', qty: '냉장고 보관 중', price: 0, cat: '채소·과일', status: 'owned', fav: false, memo: '냉장고 보관 중 · 선물/내가 산 거 아님 · 곧 정리 예정' },
       { name: '스팸', qty: '수량 미정', price: 0, cat: '해산물·육류', status: 'owned', fav: false, memo: '' },
       { name: '참치캔', qty: '수량 미정', price: 0, cat: '해산물·육류', status: 'owned', fav: false, memo: '' },
-      { name: '김', qty: '개수 나중에 확인', price: 0, cat: '양념·곡류', status: 'owned', fav: false, staple: true, memo: '유통기한 올해 9월까지 · 확인 필요' },
-      { name: '소금', qty: '상비', price: 0, cat: '상비품·조미료', status: 'owned', fav: false, staple: true, memo: '' },
-      { name: '간장', qty: '상비', price: 0, cat: '상비품·조미료', status: 'owned', fav: false, staple: true, memo: '' },
-      { name: '초고추장', qty: '상비', price: 0, cat: '상비품·조미료', status: 'owned', fav: false, staple: true, memo: '최근 구매 · 구매일 확인 중' },
-      { name: '참치액', qty: '상비', price: 0, cat: '상비품·조미료', status: 'owned', fav: false, staple: true, memo: '최근 구매 · 구매일 확인 중' },
-      { name: '다시다', qty: '상비', price: 0, cat: '상비품·조미료', status: 'owned', fav: false, staple: true, memo: '' },
-      { name: '콤부차 (요구르트맛)', qty: '음료', price: 0, cat: '음료·차·커피', status: 'owned', fav: false, staple: true, memo: '' },
-      { name: '콤부차 (자두맛)', qty: '음료', price: 0, cat: '음료·차·커피', status: 'owned', fav: false, staple: true, memo: '' },
+      { name: '콤부차 (요구르트맛)', qty: '상비', price: 0, cat: '음료·차·커피', status: 'owned', fav: false, staple: true, memo: '' },
+      { name: '콤부차 (자두맛)', qty: '상비', price: 0, cat: '음료·차·커피', status: 'owned', fav: false, staple: true, memo: '' },
       { name: '얼그레이 티백', qty: '상비', price: 0, cat: '음료·차·커피', status: 'owned', fav: false, staple: true, memo: '' },
-      { name: '커피빈 커피스틱 50개입', qty: '50개입', price: 12960, cat: '음료·차·커피', status: 'owned', fav: false, staple: true, boughtAt: '2026-11-13', memo: '컬리 구매' },
-      { name: '샤인머스캣', qty: '냉장고 보관 중', price: 0, cat: '채소·과일', status: 'owned', fav: false, memo: '선물 받은 것 (내가 산 거 아님) · 곧 정리 예정' }
+      { name: '소금', qty: '상비', price: 0, cat: '상비품·조미료', status: 'owned', fav: false, staple: true, memo: '' },
+      { name: '간장', qty: '상비', price: 0, cat: '상비품·조미료', status: 'owned', fav: false, staple: true, memo: '' }
     ].map(function (x) {
       x.id = uid();
       x.staple = !!x.staple;
@@ -347,11 +354,13 @@
       [0, '저녁', '굴밥 + 미역국 (생굴 마지막)', true],
       [1, '아침', '꿀고구마 + 삶은 계란', false],
       [1, '저녁', '스팸 계란말이 + 밥', false],
-      [2, '아침', '샤인머스캣', false],
+      [2, '아침', '잇더핏 더블초코 쉐이크', false],
       [2, '저녁', '백짬뽕 1인분', false],
+      [3, '아침', '치아바타 샌드위치 1입', false],
       [3, '저녁', '참치마요 덮밥 + 김', false],
-      [4, '저녁', '샌드위치 (보스 파티날)', false],
+      [4, '저녁', '치아바타 샌드위치 (보스 파티날)', false],
       [5, '점심', '영등포 나들이 · 외식', false],
+      [5, '저녁', '닭가슴살 스파게티', false],
       [6, '저녁', '김치볶음밥 + 계란후라이', false]
     ].map(function (m) {
       return { id: uid(), date: d(m[0]), slot: m[1], menu: m[2], done: m[3] };
@@ -359,23 +368,19 @@
 
     var shopping = [
       { name: '바게트 1개', cat: '양념·곡류', price: 3500, checked: false },
-      { name: '그릭요거트 2개', cat: '유제품·계란', price: 6980, checked: false },
       { name: '미역 1봉', cat: '해산물·육류', price: 3200, checked: false }
     ].map(function (x) { x.id = uid(); return x; });
 
-    var total = sumOf(items, function (i) { return i.price; });
-    function priceOf(n) {
-      var it = items.filter(function (x) { return x.name === n; })[0];
-      return it ? it.price : 0;
-    }
-    var kurly = priceOf('[대흥] 남해안 생굴 300g') + priceOf('계란 20구') + priceOf('커피빈 커피스틱 50개입');
+    /* 결제 금액은 실제 주문서 기준 — 11/13 식료품 8종 상품가 60,424원에서 쿠폰 7,000 + 적립금 2,100 = 9,100원 할인 (주문 전체 결제 66,224원 중 바디워시 14,900원 제외) */
     var ledger = [
-      { id: uid(), date: '2026-09-28', title: '네이버페이 · 고시히카리 햅쌀 4kg', amount: priceOf('고시히카리 햅쌀 4kg'), discount: 0, auto: true },
-      { id: uid(), date: '2026-10-23', title: '네이버페이 · 서산 황토 꿀고구마 3kg', amount: priceOf('서산 황토 꿀고구마 3kg'), discount: 0, auto: true },
-      { id: uid(), date: ymd(addDays(today, -3)), title: '마켓컬리 · 남해안 생굴 300g 외', amount: kurly, discount: 0, auto: true }
+      { id: uid(), date: '2026-09-28', title: '네이버페이 · 고시히카리 햅쌀 4kg', amount: 24900, discount: 0, auto: true },
+      { id: uid(), date: '2026-10-01', title: '마켓컬리 · 고춧가루·닭가슴살·치아바타 샌드위치 3종', amount: 26270, discount: 0, auto: true },
+      { id: uid(), date: '2026-10-09', title: '마켓컬리 · 잇더핏 더블초코맛 520g', amount: 34800, discount: 0, auto: true },
+      { id: uid(), date: '2026-10-23', title: '네이버페이 · 서산 황토 꿀고구마 3kg', amount: 14900, discount: 0, auto: true },
+      { id: uid(), date: '2026-11-13', title: '마켓컬리 · 식료품 8종 (바디워시 등 비식료품 제외)', amount: 60424, discount: 9100, auto: true }
     ];
 
-    return { v: 1, items: items, meals: meals, shopping: shopping, ledger: ledger, createdAt: new Date().toISOString() };
+    return { v: 2, items: items, meals: meals, shopping: shopping, ledger: ledger, createdAt: new Date().toISOString() };
   }
 
   /* ───────── state ───────── */
@@ -384,7 +389,7 @@
   function normalize(raw) {
     var s = raw && typeof raw === 'object' ? raw : {};
     return {
-      v: 1,
+      v: 2,
       items: (Array.isArray(s.items) ? s.items : []).map(function (i) {
         i.staple = !!i.staple;
         if (i.memo == null) i.memo = '';
@@ -729,7 +734,7 @@
     h += '<section class="card">' +
       '<div class="prog-label" style="font-weight:800;color:#8A7568;font-size:13px">처음부터 다시</div>' +
       '<div class="btn-col" style="margin-top:11px">' +
-        '<button type="button" class="btn danger" data-act="reset">초기화 (예시 데이터로 되돌리기)</button>' +
+        '<button type="button" class="btn danger" data-act="reset">초기화 (처음 데이터로 되돌리기)</button>' +
       '</div>' +
     '</section>';
     return h;
@@ -968,7 +973,7 @@
       submit: '재고에 담기',
       html:
         '<label class="field"><span class="label">영수증이나 주문내역을 그대로 붙여넣으세요</span>' +
-          '<textarea class="input" name="raw" rows="5" placeholder="한 줄에 하나씩, 끝에 금액을 넣어 주세요&#10;예)&#10;[대흥] 남해안 생굴 300g  12,900&#10;특란 20구 7,399&#10;참치액 진 500g 3,990"></textarea></label>' +
+          '<textarea class="input" name="raw" rows="5" placeholder="한 줄에 하나씩, 끝에 금액을 넣어 주세요&#10;예)&#10;[대흥] 남해안 생굴 300g  8,590&#10;특란 20구 7,399&#10;참치액 진 500g 3,990"></textarea></label>' +
         '<div class="preview" id="pastePreview"></div>' +
         '<div class="pv-total" id="pasteTotal"></div>' +
         '<label class="checkline"><input type="checkbox" name="ledger" checked /> 가계부에도 결제 내역으로 기록</label>',
@@ -1086,8 +1091,8 @@
         break;
 
       case 'reset':
-        confirmSheet('모든 기록을 지울까요?', '냉장고·식단·장볼 목록·가계부가 모두 지워지고 <b>예시 데이터로 되돌아가요.</b> 되돌릴 수 없어요.', function () {
-          state = seed(); save(); render(); toast('예시 데이터로 되돌렸어요');
+        confirmSheet('모든 기록을 지울까요?', '냉장고·식단·장볼 목록·가계부가 모두 지워지고 <b>처음 데이터(컬리 주문내역 기준)로 되돌아가요.</b> 되돌릴 수 없어요.', function () {
+          state = seed(); save(); render(); toast('처음 데이터로 되돌렸어요');
         }, '초기화');
         break;
 
@@ -1283,7 +1288,7 @@
   render();
   if (firstRun) {
     setTimeout(function () {
-      toast('예시 데이터로 채워 뒀어요 · 금액은 대략값이에요');
+      toast('컬리 실제 주문내역으로 채워 뒀어요 · 11/13 주문 기준');
     }, 600);
   }
 })();
