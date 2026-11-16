@@ -595,7 +595,7 @@
         '<div class="search-wrap">' + ICON.search +
           '<input type="text" data-search autocomplete="off" placeholder="재료 이름으로 찾기" value="' + esc(search) + '" /></div>' +
         '<div class="chips">' + chips + '</div>' +
-        '<div class="fridge-sum">전체 ' + state.items.length + '개 · 보유 <b>' + m.ownedCount + '</b> · 소진 <b>' + m.usedCount +
+        '<div class="fridge-sum">전체 ' + state.items.length + '개 · 보유 중 <b>' + m.ownedCount + '</b> · 소진 <b>' + m.usedCount +
           '</b> · 상비 <b>' + m.stapleCount + '</b> · 남은 재고 가치 <b>' + nf(m.remainValue) + '원</b></div>' +
       '</section>' +
       '<div class="itemlist" id="itemList">' + itemListHtml() + '</div>' +
@@ -608,7 +608,7 @@
   function itemCard(i) {
     var used = i.status === 'used';
     var staple = !!i.staple;
-    var label = staple ? (used ? '떨어짐' : '보유 중') : (used ? '소진' : '보유');
+    var label = staple ? (used ? '떨어짐' : '보유 중') : (used ? '소진' : '보유 중');
     return '<div class="item-card' + (used ? ' used' : '') + '">' +
       '<button type="button" class="star' + (i.fav ? ' on' : '') + '" data-act="item:fav" data-id="' + i.id + '" aria-label="즐겨찾기" aria-pressed="' + !!i.fav + '">' + ICON.star + '</button>' +
       '<div class="item-main">' +
@@ -937,7 +937,7 @@
         '<input class="input" type="date" name="boughtAt" value="' + esc(it ? (it.boughtAt || '') : '') + '" /></label>' +
       '<div class="field"><span class="label">상태</span>' +
         '<div class="seg" data-seg="status">' +
-          '<button type="button" data-val="owned" class="' + (status === 'owned' ? 'on' : '') + '">보유</button>' +
+          '<button type="button" data-val="owned" class="' + (status === 'owned' ? 'on' : '') + '">보유 중</button>' +
           '<button type="button" data-val="used" class="' + (status === 'used' ? 'on' : '') + '">소진</button>' +
         '</div><input type="hidden" name="status" value="' + status + '" /></div>' +
       '<label class="checkline"><input type="checkbox" name="staple"' + (it && it.staple ? ' checked' : '') + ' /> 상비품 (개수·식대 계산 제외)</label>' +
@@ -1211,7 +1211,7 @@
             toast('다시 보유 중으로 바꿨어요');
           } else {
             save(); render();
-            toast(obj.status === 'used' ? '소진으로 표시했어요' : '다시 보유로 바꿨어요');
+            toast(obj.status === 'used' ? '소진으로 표시했어요' : '다시 보유 중으로 바꿨어요');
           }
         }
         break;
