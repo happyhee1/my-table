@@ -111,9 +111,6 @@
   .chip.active{background:#3A2A20;border-color:#3A2A20;color:#fff}
   .chip.fav{color:#A97B18;border-color:#EFDDB4;background:#FDF8EA}
   .chip.fav.active{background:#DCA83E;border-color:#DCA83E;color:#fff}
-  .fav-hd{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:#8A7568;letter-spacing:-.01em}
-  .fav-hd .star-ic{color:#DCA83E;display:grid;place-items:center}
-  .fav-hd .star-ic svg{width:16px;height:16px;fill:#F2C86A;stroke:#DCA83E}
   .fridge-sum{margin-top:11px;padding-top:11px;border-top:1px solid #F7EEE6;font-size:11.5px;font-weight:600;color:#A69384;letter-spacing:-.01em}
   .fridge-sum b{color:#7A5F4C;font-weight:800}
   .itemlist{display:flex;flex-direction:column;gap:8px}
@@ -187,17 +184,10 @@
   .note{font-size:11px;font-weight:600;line-height:1.65;color:#A69384;margin:10px 2px 0;word-break:keep-all}
 
   /* ── tab bar ── */
-  .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:2px;padding:7px 6px calc(7px + env(safe-area-inset-bottom));background:rgba(255,255,255,.97);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid #F2E6DA;z-index:30}
-  .tab{border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 0 4px;color:#B3A296;font-size:10.5px;font-weight:700;letter-spacing:-.02em;cursor:pointer;min-width:0}
-  .tab .ic{width:40px;height:26px;border-radius:999px;display:grid;place-items:center;transition:background .15s ease}
+  .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:grid;grid-template-columns:repeat(5,1fr);gap:2px;padding:7px 6px calc(7px + env(safe-area-inset-bottom));background:rgba(255,255,255,.97);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid #F2E6DA;z-index:30}
+  .tab{border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 0 4px;color:#B3A296;font-size:10.5px;font-weight:700;letter-spacing:-.02em;cursor:pointer}
+  .tab .ic{width:42px;height:26px;border-radius:999px;display:grid;place-items:center;transition:background .15s ease}
   .tab svg{width:20px;height:20px}
-  .tab > span:last-child{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  @media (max-width:400px){
-    .tabbar{gap:1px;padding-left:5px;padding-right:5px}
-    .tab{font-size:10px;letter-spacing:-.035em}
-    .tab .ic{width:36px;height:24px}
-    .tab svg{width:19px;height:19px}
-  }
   .tab.active{color:#C86D44}
   .tab.active .ic{background:#FBEBDF}
 
@@ -281,7 +271,6 @@
   var TABS = [
     { id: 'meals', label: '주간 식단', icon: ICON.meals },
     { id: 'fridge', label: '냉장고 재고', icon: ICON.fridge },
-    { id: 'fav', label: '즐겨찾기', icon: ICON.star },
     { id: 'shopping', label: '장볼 목록', icon: ICON.basket },
     { id: 'ledger', label: '가계부', icon: ICON.receipt },
     { id: 'summary', label: '장보기 요약', icon: ICON.chart }
@@ -647,23 +636,6 @@
     return favFirst(list).map(itemCard).join('');
   }
 
-  /* ── 즐겨찾기 ── */
-  function viewFav() {
-    var favs = favFirst(state.items.filter(function (i) { return !!i.fav; }));
-    var h = '<section class="card">' +
-        '<div class="fav-hd"><span class="star-ic">' + ICON.star + '</span>즐겨찾기 <span style="color:#B4653C">' + favs.length + '개</span></div>' +
-        '<div class="fridge-sum">자주 사는 품목을 모아 뒀어요. 즐겨찾기한 품목은 재고 목록에서도 맨 위에 먼저 나와요.</div>' +
-      '</section>';
-    if (!favs.length) {
-      return h +
-        '<div class="empty">자주 쓰는 품목의 ★을 눌러 즐겨찾기에 담아 보세요.</div>' +
-        '<button type="button" class="btn ghost" data-act="tab" data-val="fridge">냉장고 재고에서 ★ 누르기</button>';
-    }
-    h += '<div class="itemlist" id="itemList">' + favs.map(itemCard).join('') + '</div>';
-    h += '<button type="button" class="btn ghost" data-act="tab" data-val="fridge">냉장고 전체 보기</button>';
-    return h;
-  }
-
   /* ── 장볼 목록 ── */
   function viewShopping() {
     var checked = state.shopping.filter(function (s) { return s.checked; });
@@ -813,7 +785,6 @@
   var VIEWS = {
     meals: viewMeals,
     fridge: viewFridge,
-    fav: viewFav,
     shopping: viewShopping,
     ledger: viewLedger,
     summary: viewSummary
