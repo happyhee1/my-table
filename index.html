@@ -30,7 +30,10 @@
   .hd-text{flex:1;min-width:0}
   .hd-eyebrow{font-size:11.5px;font-weight:700;color:#AD8E79;letter-spacing:.02em;margin-bottom:2px}
   .hd-title{font-size:17px;font-weight:800;letter-spacing:-.025em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .reset{flex:none;display:inline-flex;align-items:center;gap:4px;padding:9px 13px;border-radius:999px;border:1px solid #EFE0D3;background:#fff;color:#6B5446;font-size:12.5px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(120,80,50,.05)}
+  .reset{flex:none;display:inline-flex;align-items:center;gap:4px;padding:8px 11px;border-radius:999px;border:1px solid #EFE0D3;background:#fff;color:#6B5446;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(120,80,50,.05)}
+  .sync-btn{flex:none;display:inline-flex;align-items:center;gap:4px;padding:8px 10px;border-radius:999px;border:1px solid #EFE0D3;background:#fff;color:#8A7568;font-size:11.5px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(120,80,50,.05)}
+  .sync-btn.on{background:#EEF4EE;border-color:#DCE9DE;color:#4D7A5A}
+  .sync-btn.err{background:#FDF0ED;border-color:#F1D2C9;color:#C0553F}
 
   main{padding:12px 14px 132px;display:flex;flex-direction:column;gap:12px}
 
@@ -233,6 +236,7 @@
       <div class="hd-eyebrow">우리집 식탁</div>
       <div class="hd-title" id="hdTitle">이번 주 식단 · 장보기</div>
     </div>
+    <button class="sync-btn" id="syncBtn" data-act="auth" type="button">☁️ 로그인</button>
     <button class="reset" data-act="reset" type="button">↻ 초기화</button>
   </header>
 
@@ -246,12 +250,26 @@
 
 <noscript><p style="padding:20px;text-align:center">이 앱을 쓰려면 자바스크립트를 켜 주세요.</p></noscript>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (function () {
   'use strict';
 
   var KEY = 'sohee_table_v2';
+  var DIRTY_KEY = 'sohee_table_dirty_v2';
+  var SUPABASE_URL = 'https://ytuzltrgnwlwqcgdxesz.supabase.co';
+  var SUPABASE_KEY = 'sb_publishable_NQCxBsMq2sOJoANUkq4WpA_KE6QO7vl';
+  var sb = (window.supabase && window.supabase.createClient)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+    : null;
+  var authSession = null;
+  var syncStatus = 'offline'; /* offline | syncing | synced | error */
+  var lastSyncedAt = null;
+  var pushQueued = false;
+  var pushing = false;
+
   var CATS = ['해산물·육류', '채소·과일', '간편식·밀키트', '유제품·계란', '양념·곡류', '상비품·조미료', '음료·차·커피'];
+  var LOCS = ['', '냉장', '냉동', '실온'];
   var SLOTS = ['아침', '점심', '저녁'];
   var DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -401,6 +419,8 @@
         i.staple = !!i.staple;
         if (i.memo == null) i.memo = '';
         if (i.boughtAt == null) i.boughtAt = '';
+        if (i.location == null) i.location = '';
+        if (i.expiry == null) i.expiry = '';
         return i;
       }),
       meals: Array.isArray(s.meals) ? s.meals : [],
@@ -420,9 +440,127 @@
     firstRun = true;
     return seed();
   }
-  function save() {
+  function updateSyncBtn() {
+    var btn = document.getElementById('syncBtn');
+    if (!btn) return;
+    btn.className = 'sync-btn';
+    if (!authSession) {
+      btn.textContent = '☁️ 로그인';
+    } else if (syncStatus === 'syncing') {
+      btn.textContent = '☁️ 동기화 중';
+    } else if (syncStatus === 'error') {
+      btn.classList.add('err');
+      btn.textContent = '☁️ 동기화 오류';
+    } else {
+      btn.classList.add('on');
+      btn.textContent = '☁️ 동기화됨';
+    }
+  }
+  function pushRemote() {
+    if (!sb || !authSession || !authSession.user) return Promise.resolve(false);
+    if (pushing) { pushQueued = true; return Promise.resolve(true); }
+    pushing = true;
+    syncStatus = 'syncing';
+    updateSyncBtn();
+    var nowIso = new Date().toISOString();
+    return sb.from('my_table_state')
+      .upsert({ user_id: authSession.user.id, data: state, updated_at: nowIso }, { onConflict: 'user_id' })
+      .then(function (res) {
+        pushing = false;
+        if (res.error) {
+          syncStatus = 'error';
+          try { localStorage.setItem(DIRTY_KEY, '1'); } catch (e) {}
+          updateSyncBtn();
+          return false;
+        }
+        try { localStorage.removeItem(DIRTY_KEY); } catch (e) {}
+        syncStatus = 'synced';
+        lastSyncedAt = nowIso;
+        updateSyncBtn();
+        if (pushQueued) {
+          pushQueued = false;
+          return pushRemote();
+        }
+        return true;
+      })
+      .catch(function () {
+        pushing = false;
+        syncStatus = 'error';
+        try { localStorage.setItem(DIRTY_KEY, '1'); } catch (e) {}
+        updateSyncBtn();
+        return false;
+      });
+  }
+  function pullOrMigrate(silent) {
+    if (!sb || !authSession || !authSession.user) return Promise.resolve();
+    syncStatus = 'syncing';
+    updateSyncBtn();
+    return sb.from('my_table_state')
+      .select('data, updated_at')
+      .eq('user_id', authSession.user.id)
+      .maybeSingle()
+      .then(function (res) {
+        if (res.error) {
+          syncStatus = 'error';
+          updateSyncBtn();
+          if (!silent) toast('온라인 데이터를 불러오지 못했어요: ' + res.error.message);
+          return;
+        }
+        if (!res.data || !res.data.data || !Array.isArray(res.data.data.items)) {
+          /* 온라인에 아직 데이터가 없으면 현재 기기(localStorage) 데이터를 자동 마이그레이션 */
+          return pushRemote().then(function (ok) {
+            if (ok && !silent) toast('기존 기기 데이터를 온라인으로 옮겼어요!');
+          });
+        }
+        var dirty = false;
+        try { dirty = localStorage.getItem(DIRTY_KEY) === '1'; } catch (e) {}
+        if (dirty) {
+          return pushRemote().then(function (ok) {
+            if (ok && !silent) toast('오프라인 변경사항을 온라인에 반영했어요');
+          });
+        }
+        state = normalize(res.data.data);
+        save(true);
+        syncStatus = 'synced';
+        lastSyncedAt = res.data.updated_at;
+        render();
+        updateSyncBtn();
+        if (!silent) toast('온라인 최신 재고를 불러왔어요');
+      })
+      .catch(function () {
+        syncStatus = 'error';
+        updateSyncBtn();
+      });
+  }
+  function initAuth() {
+    updateSyncBtn();
+    if (!sb) return;
+    sb.auth.getSession().then(function (res) {
+      authSession = res && res.data ? res.data.session : null;
+      updateSyncBtn();
+      if (authSession) pullOrMigrate(true);
+    });
+    sb.auth.onAuthStateChange(function (event, session) {
+      var wasLoggedIn = !!(authSession && authSession.user);
+      authSession = session || null;
+      if (!authSession) {
+        syncStatus = 'offline';
+        updateSyncBtn();
+      } else if (event === 'SIGNED_IN' && !wasLoggedIn) {
+        pullOrMigrate(false);
+      }
+    });
+  }
+  function save(skipRemote) {
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
     catch (e) { toast('저장 공간이 부족해 저장하지 못했어요'); }
+    if (!skipRemote) {
+      if (authSession && authSession.user) {
+        pushRemote();
+      } else {
+        try { localStorage.setItem(DIRTY_KEY, '1'); } catch (e) {}
+      }
+    }
   }
 
   /* ───────── metrics ───────── */
@@ -604,6 +742,8 @@
         '<div class="item-name">' + esc(i.name) + '</div>' +
         '<div class="item-meta">' + (i.qty ? esc(i.qty) + ' · ' : '') + priceText(i.price) +
           '<span class="tag">' + esc(i.cat) + '</span>' +
+          (i.location ? '<span class="tag">' + esc(i.location) + '</span>' : '') +
+          (i.expiry ? '<span class="tag">유통 ' + shortDate(i.expiry) + '</span>' : '') +
           (staple ? '<span class="tag staple">상비품</span>' : '') +
           (i.boughtAt ? '<span class="tag">' + shortDate(i.boughtAt) + ' 구매</span>' : '') + '</div>' +
         (i.memo ? '<div class="item-memo">' + esc(i.memo) + '</div>' : '') +
@@ -765,7 +905,7 @@
         '<button type="button" class="btn ghost" data-act="export">JSON으로 내보내기</button>' +
         '<label class="btn ghost" style="text-align:center">JSON 불러오기<input type="file" id="importFile" accept="application/json,.json" hidden /></label>' +
       '</div>' +
-      '<p class="note">기록은 이 브라우저(아이폰 사파리) 안에만 저장돼요. 기기를 바꾸기 전에 백업해 두면 좋아요.</p>' +
+      '<p class="note">상단 <b>☁️ 로그인</b>으로 연결하면 다른 기기와 실시간 동기화되고, JSON 백업도 언제든 내려받을 수 있어요.</p>' +
     '</section>';
 
     h += '<section class="card">' +
@@ -890,6 +1030,7 @@
   function openItemSheet(id) {
     var it = id ? state.items.filter(function (x) { return x.id === id; })[0] : null;
     var status = it ? it.status : 'owned';
+    var loc = it && it.location ? it.location : '';
     var html =
       '<label class="field"><span class="label">품목명</span>' +
         '<input class="input" name="name" autocomplete="off" placeholder="예: 남해안 생굴 300g" value="' + esc(it ? it.name : '') + '" required /></label>' +
@@ -902,10 +1043,18 @@
         '<label class="field"><span class="label">금액 (원)</span>' +
           '<input class="input" name="price" inputmode="numeric" placeholder="12900" value="' + (it && it.price ? it.price : '') + '" /></label>' +
       '</div>' +
+      '<div class="field"><span class="label">보관 위치 (선택)</span>' +
+        '<div class="seg" data-seg="location">' + LOCS.map(function (l) {
+          return '<button type="button" data-val="' + l + '" class="' + (l === loc ? 'on' : '') + '">' + (l || '미지정') + '</button>';
+        }).join('') + '</div><input type="hidden" name="location" value="' + esc(loc) + '" /></div>' +
+      '<div class="grid2">' +
+        '<label class="field"><span class="label">유통기한 (선택)</span>' +
+          '<input class="input" type="date" name="expiry" value="' + esc(it ? (it.expiry || '') : '') + '" /></label>' +
+        '<label class="field"><span class="label">구매일 (선택)</span>' +
+          '<input class="input" type="date" name="boughtAt" value="' + esc(it ? (it.boughtAt || '') : '') + '" /></label>' +
+      '</div>' +
       '<label class="field"><span class="label">메모 (선택)</span>' +
-        '<input class="input" name="memo" autocomplete="off" placeholder="예: 유통기한 확인 필요" value="' + esc(it ? (it.memo || '') : '') + '" /></label>' +
-      '<label class="field"><span class="label">구매일 (선택)</span>' +
-        '<input class="input" type="date" name="boughtAt" value="' + esc(it ? (it.boughtAt || '') : '') + '" /></label>' +
+        '<input class="input" name="memo" autocomplete="off" placeholder="예: 개봉 후 빠른 소진" value="' + esc(it ? (it.memo || '') : '') + '" /></label>' +
       '<div class="field"><span class="label">상태</span>' +
         '<div class="seg" data-seg="status">' +
           '<button type="button" data-val="owned" class="' + (status === 'owned' ? 'on' : '') + '">보유 중</button>' +
@@ -929,6 +1078,8 @@
           it.cat = String(fd.get('cat'));
           it.qty = String(fd.get('qty') || '').trim();
           it.price = price;
+          it.location = String(fd.get('location') || '').trim();
+          it.expiry = String(fd.get('expiry') || '').trim();
           it.status = String(fd.get('status') || 'owned');
           it.fav = fd.get('fav') === 'on';
           it.staple = fd.get('staple') === 'on';
@@ -937,7 +1088,8 @@
         } else {
           state.items.push({
             id: uid(), name: name, cat: String(fd.get('cat')), qty: String(fd.get('qty') || '').trim(),
-            price: price, status: String(fd.get('status') || 'owned'), fav: fd.get('fav') === 'on',
+            price: price, location: String(fd.get('location') || '').trim(), expiry: String(fd.get('expiry') || '').trim(),
+            status: String(fd.get('status') || 'owned'), fav: fd.get('fav') === 'on',
             staple: fd.get('staple') === 'on', memo: String(fd.get('memo') || '').trim(),
             boughtAt: String(fd.get('boughtAt') || '').trim()
           });
@@ -947,6 +1099,73 @@
         }
         save(); close(); render(); toast(it ? '재료를 수정했어요' : '재료를 추가했어요');
       }
+    });
+  }
+
+  /* ───────── auth / sync sheet ───────── */
+  function openAuthSheet() {
+    if (!sb) { toast('동기화 모듈을 불러오지 못했어요'); return; }
+    if (authSession && authSession.user) {
+      var timeLabel = lastSyncedAt ? new Date(lastSyncedAt).toLocaleString('ko-KR') : '방금 전';
+      var wrap = openSheet({
+        title: '온라인 동기화',
+        html:
+          '<p class="sheet-note">로그인 계정: <b>' + esc(authSession.user.email) + '</b><br />마지막 동기화: ' + esc(timeLabel) + '</p>' +
+          '<div class="btn-col">' +
+            '<button type="button" class="btn subtle" data-act="sync:pull">온라인 최신 재고 불러오기</button>' +
+            '<button type="button" class="btn ghost" data-act="sync:push">이 기기 데이터로 온라인 덮어쓰기</button>' +
+          '</div>',
+        submit: '로그아웃',
+        danger: true,
+        onSubmit: function (fd, w, close) {
+          sb.auth.signOut().then(function () {
+            authSession = null; syncStatus = 'offline'; updateSyncBtn(); close();
+            toast('로그아웃했어요 (이 기기 데이터는 남아 있어요)');
+          });
+        }
+      });
+      return;
+    }
+
+    var wrap = openSheet({
+      title: '온라인 동기화 로그인',
+      html:
+        '<p class="sheet-note">로그인하면 아이폰·PC 어디서나 재고가 실시간으로 맞춰지고, 채박사도 최신 재고를 볼 수 있어요. 수정 권한은 <b>소희 님 계정</b>에만 있어요.</p>' +
+        '<label class="field"><span class="label">이메일</span>' +
+          '<input class="input" type="email" name="email" value="happyhee1122@gmail.com" autocomplete="email" required /></label>' +
+        '<label class="field"><span class="label">비밀번호 (6자 이상)</span>' +
+          '<input class="input" type="password" name="password" placeholder="비밀번호 입력" autocomplete="current-password" required /></label>' +
+        '<button type="button" class="btn ghost" data-act="auth:signup">처음이면 이 비밀번호로 가입하기</button>',
+      submit: '로그인',
+      onSubmit: function (fd, w, close) {
+        var email = String(fd.get('email') || '').trim();
+        var password = String(fd.get('password') || '');
+        if (!email || password.length < 6) { toast('이메일과 6자 이상 비밀번호를 입력해 주세요'); return; }
+        sb.auth.signInWithPassword({ email: email, password: password }).then(function (res) {
+          if (res.error) { toast('로그인 실패: ' + res.error.message); return; }
+          authSession = res.data.session;
+          close();
+          pullOrMigrate(false);
+        });
+      }
+    });
+    wrap.querySelector('[data-act="auth:signup"]').addEventListener('click', function () {
+      var form = wrap.querySelector('form');
+      var fd = new FormData(form);
+      var email = String(fd.get('email') || '').trim();
+      var password = String(fd.get('password') || '');
+      if (!email || password.length < 6) { toast('이메일과 6자 이상 비밀번호를 입력해 주세요'); return; }
+      sb.auth.signUp({ email: email, password: password }).then(function (res) {
+        if (res.error) { toast('가입 실패: ' + res.error.message); return; }
+        if (res.data && res.data.session) {
+          authSession = res.data.session;
+          wrap.remove();
+          pullOrMigrate(false);
+        } else {
+          wrap.remove();
+          toast('인증 메일을 보냈어요! 메일 링크를 누른 뒤 로그인해 주세요');
+        }
+      });
     });
   }
 
@@ -1257,6 +1476,21 @@
         });
         break;
 
+      case 'auth':
+        openAuthSheet();
+        break;
+
+      case 'sync:pull':
+        try { localStorage.removeItem(DIRTY_KEY); } catch (e) {}
+        closeSheets();
+        pullOrMigrate(false);
+        break;
+
+      case 'sync:push':
+        closeSheets();
+        pushRemote().then(function (ok) { toast(ok ? '이 기기 데이터를 온라인에 저장했어요' : '저장에 실패했어요'); });
+        break;
+
       case 'export':
         exportJSON();
         break;
@@ -1327,8 +1561,9 @@
 
   /* ───────── boot ───────── */
   state = load();
-  save();
+  save(true);
   render();
+  initAuth();
   if (firstRun) {
     setTimeout(function () {
       toast('컬리 실제 주문내역으로 채워 뒀어요 · 11/13 주문 기준');
