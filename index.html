@@ -1222,6 +1222,10 @@
     if (/[*＊]{2,}/.test(s)) return true;                                         // 가려진 번호·주소
     if (/\(\d{5}\)\s*$/.test(s)) return true;                                    // 우편번호
     if (/(특별시|광역시|특별자치시|특별자치도|경기도|강원특별자치도|충청[북남]도|전라[북남]도|경상[북남]도|제주특별자치도)\s+\S+/.test(s)) return true;
+    if (/(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)\S*\s+\S+(구|군|시)(\s|$)/.test(s)) return true;   // 주소
+    if (/\S+(로|길|대로)\s*\d/.test(s)) return true;                              // 도로명 주소
+    if (/\d{7,}/.test(s) && !/[가-힣]/.test(s)) return true;                       // 승인번호·바코드
+    if (/(점|지점|마트|슈퍼|편의점|약국)$/.test(s) && s.replace(/\s/g, '').length <= 12) return true; // 가게 이름
     if (/^[가-힣]{2,4}\s*\(\s*[가-힣]{2,4}\s*\)$/.test(s)) return true;          // 받는사람 이름
     if (!/[0-9]/.test(s) && s.length <= 16 && /(니다|습니다|합니다|됩니다|하세요|주세요)[.。]?$/.test(s)) return true; // 안내 문장 조각
     if (/^(상품준비중|배송준비중|배송중|배송완료|배송출발|주문접수|주문완료|결제완료|결제대기|구매확정|취소요청|취소완료|반품요청|교환요청|리뷰작성|도착완료|무료배송)$/.test(s)) return true;
@@ -1271,7 +1275,9 @@
       .replace(/[\uFF10-\uFF19]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
       .replace(/[\uFF0C]/g, ',')
       .replace(/[\u20A9\uFFE6]/g, ' ')
-      .replace(/\u00A0/g, ' ');
+      .replace(/\u00A0/g, ' ')
+      .replace(/(\d)\.(\d{3})(?!\d)/g, '$1,$2')   // 3.900 → 3,900 (OCR이 쉼표를 점으로 읽은 경우)
+      .replace(/[\[\]{}`]/g, ' ');
     var out = [];
     s.split('\n').forEach(function (line) {
       var l = String(line).replace(/\t/g, ' ').replace(/ {2,}/g, ' ').trim();
@@ -1428,7 +1434,10 @@
               }
             }).then(function (w) {
               worker = w;
-              return w.recognize(canvas);
+              /* 영수증은 한 줄씩 늘어선 글자 덩어리라 단일 블록 모드가 더 잘 읽히고,
+                 띄어쓰기를 살려야 품목명과 금액이 같은 줄에 남는다 */
+              return w.setParameters({ tessedit_pageseg_mode: '6', preserve_interword_spaces: '1' })
+                .then(function () { return w.recognize(canvas); });
             });
           });
         })
