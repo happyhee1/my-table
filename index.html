@@ -218,6 +218,14 @@
   .prow .px{width:26px;height:26px;flex:none;border-radius:8px;border:1px solid #EDE0D3;background:#fff;color:#B39C87;font-size:12px;cursor:pointer}
   .pv-total{font-size:11.5px;font-weight:800;color:#8A7568;text-align:right;margin-top:2px}
   .pv-total b{color:#C86D44;font-size:13px}
+  .ocr-box{display:flex;flex-direction:column;gap:5px}
+  .ocr-pick{position:relative;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 12px;border:1px dashed #E8C4A6;border-radius:12px;background:#FFF7F0;color:#B4653C;font-size:12.5px;font-weight:800;cursor:pointer;letter-spacing:-.01em;-webkit-user-select:none;user-select:none}
+  .ocr-pick:active{background:#FBE9DA}
+  .ocr-pick.busy{opacity:.55;pointer-events:none}
+  .ocr-pick input{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;cursor:pointer}
+  .ocr-status{font-size:11.5px;font-weight:700;color:#9B8478;line-height:1.5;letter-spacing:-.01em;word-break:keep-all}
+  .ocr-status.err{color:#C0553B}
+  .ocr-status[hidden]{display:none}
 
   #toast{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom));transform:translate(-50%,12px);z-index:80;max-width:86vw;padding:11px 16px;border-radius:999px;background:#3A2A20;color:#fff;font-size:12.5px;font-weight:700;letter-spacing:-.01em;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;box-shadow:0 10px 24px -14px rgba(0,0,0,.7);text-align:center}
   #toast.show{opacity:1;transform:translate(-50%,0)}
@@ -1191,12 +1199,41 @@
     return best || '채소·과일';
   }
 
+  /* 영수증·주문내역에 늘 붙는 UI/결제 문구 — 품목으로 잡지 않음 */
+  var JUNK_WORDS = ['배송', '주문상세', '주문금액', '주문번호', '주문일시', '주문내역', '상품금액', '상품주문', '상품준비', '상품정보', '결제정보', '결제수단', '결제금액', '결제일시', '간편결제', '카드', '일시불', '할부', '무이자', '쿠폰', '할인', '적립', '포인트', '마일리지', '승인', '거래일시', '영수증', '사업자', '대표자', '전화번호', '매장', '계산대', '캐셔', '복사', '장바구니', '구매확정', '취소요청', '취소완료', '교환요청', '반품요청', '부가세', '면세', '과세', '합계', '총액', '가맹', '고객', '등록번호', '잔돈', '거스름', '받은금액', '현금영수증'];
+  var JUNK_EN = ['TEL', 'FAX', 'VAT', 'POS', 'CARD', 'CASH', 'TOTAL', 'SUBTOTAL', 'APPROVAL', 'RECEIPT'];
+  function isJunkName(s) {
+    for (var i = 0; i < JUNK_WORDS.length; i++) {
+      if (s.indexOf(JUNK_WORDS[i]) >= 0) return true;
+    }
+    var up = s.toUpperCase();
+    for (var j = 0; j < JUNK_EN.length; j++) {
+      if (up.indexOf(JUNK_EN[j]) >= 0) return true;
+    }
+    return false;
+  }
+
+  function isJunkLine(s) {
+    if (!s) return true;
+    if (/^\d{1,2}:\d{2}$/.test(s)) return true;                                  // 시간
+    if (!/[가-힣a-zA-Z]/.test(s) && /^[\d\s,.%:()\-\/+]+$/.test(s)) return true;  // 숫자만 있는 줄(배터리·시계 등)
+    if (!/[가-힣]/.test(s) && /\d{2,4}[.\-/]\d{1,2}/.test(s)) return true;        // 날짜
+    if (/[*＊]{2,}/.test(s)) return true;                                         // 가려진 번호·주소
+    if (/\(\d{5}\)\s*$/.test(s)) return true;                                    // 우편번호
+    if (/(특별시|광역시|특별자치시|특별자치도|경기도|강원특별자치도|충청[북남]도|전라[북남]도|경상[북남]도|제주특별자치도)\s+\S+/.test(s)) return true;
+    if (/^[가-힣]{2,4}\s*\(\s*[가-힣]{2,4}\s*\)$/.test(s)) return true;          // 받는사람 이름
+    if (!/[0-9]/.test(s) && s.length <= 16 && /(니다|습니다|합니다|됩니다|하세요|주세요)[.。]?$/.test(s)) return true; // 안내 문장 조각
+    if (/^(상품준비중|배송준비중|배송중|배송완료|배송출발|주문접수|주문완료|결제완료|결제대기|구매확정|취소요청|취소완료|반품요청|교환요청|리뷰작성|도착완료|무료배송)$/.test(s)) return true;
+    return false;
+  }
+
   function parseLine(raw) {
     var s = String(raw).replace(/\t/g, ' ').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
     if (!s) return null;
     s = s.replace(/^[\s\-•·*>|]+/, '').replace(/^\d{1,2}[).]\s*/, '').trim();
     if (!s) return null;
-    if (/^(합계|총액|총\s*금액|결제|결제수단|배송비|할인|포인트|부가세|과세|면세|주문번호|받는|배송지|카드|일시|영수증|승인|거래)/.test(s)) return null;
+    if (isJunkLine(s)) return null;
+    if (/^(합계|총액|소계|총\s*(금액|결제|주문|합계)|결제|배송비|배송지|할인|쿠폰|적립|포인트|마일리지|부가세|과세|면세|주문|받는|수령|카드|간편\s*결제|일시|영수증|승인|거래|상품\s*(금액|준비|주문|정보)|취소|반품|교환|리뷰|문의|복사|장바구니|모바일|온라인|매장|사업자)/.test(s)) return null;
 
     var qty = 1;
     var pre = s.match(/^(\d{1,2})\s*[xX×]\s*/);
@@ -1220,7 +1257,96 @@
     s = s.replace(/[,|·:;/]+\s*$/, '').replace(/\s{2,}/g, ' ').trim();
     if (!s) return null;
     if (!amount && s.length < 2) return null;
+    if (/^(총|합계|소계|계)$/.test(s)) return null;
+    if (isJunkName(s)) return null;
     return { name: s, amount: amount * qty, cat: guessCat(s) };
+  }
+
+  /* OCR 결과 보정: 금액만 떨어진 줄을 앞 품목 줄에 붙이고, 구분선·빈 줄을 정리 */
+  function normalizeOcrText(txt) {
+    var s = String(txt || '')
+      .replace(/\r\n?/g, '\n')
+      .replace(/[\uFF10-\uFF19]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
+      .replace(/[\uFF0C]/g, ',')
+      .replace(/[\u20A9\uFFE6]/g, ' ')
+      .replace(/\u00A0/g, ' ');
+    var out = [];
+    s.split('\n').forEach(function (line) {
+      var l = String(line).replace(/\t/g, ' ').replace(/ {2,}/g, ' ').trim();
+      if (!l) { if (out.length && out[out.length - 1] !== '') out.push(''); return; }
+      if (/^[-=_*~·•+.\s]+$/.test(l)) return;            // 구분선·점선
+      if (l === '원' && out.length) {                     // 금액 뒤 '원'만 남은 줄
+        var w = out.length - 1;
+        while (w >= 0 && !out[w]) w--;
+        if (w >= 0 && /[0-9]$/.test(out[w])) { out[w] += '원'; return; }
+      }
+      var only = l.replace(/([0-9][0-9,]{2,})\s*원?/g, ' ').replace(/[-+·|]/g, ' ').trim();
+      if (only === '') {                                  // 숫자·금액만 있는 줄
+        var nums = l.match(/[0-9][0-9,]{2,}/g) || [];
+        var p = out.length - 1;
+        while (p >= 0 && !out[p]) p--;
+        if (p >= 0 && nums.length && !/[0-9]\s*원?$/.test(out[p])) { out[p] = out[p] + ' ' + nums[0]; return; }
+        if (p >= 0 && nums.length) return;                // 앞 줄에 이미 금액이 있으면 원가·합계 줄은 버림
+      }
+      out.push(l);
+    });
+    return out.join('\n').replace(/\n{2,}/g, '\n').trim();
+  }
+
+  var OCR_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  var ocrScriptPromise = null;
+
+  function loadOcrScript() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    if (ocrScriptPromise) return ocrScriptPromise;
+    ocrScriptPromise = new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = OCR_SRC;
+      s.async = true;
+      s.onload = function () {
+        if (window.Tesseract) resolve(window.Tesseract);
+        else { ocrScriptPromise = null; reject(new Error('tesseract missing')); }
+      };
+      s.onerror = function () { ocrScriptPromise = null; reject(new Error('tesseract load failed')); };
+      document.head.appendChild(s);
+    });
+    return ocrScriptPromise;
+  }
+
+  /* 사진을 OCR에 넘기기 좋게 축소(긴 변 1800px)·그레이스케일로 변환 */
+  function prepareOcrCanvas(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      function done(fn, arg) { URL.revokeObjectURL(url); fn(arg); }
+      img.onload = function () {
+        try {
+          var max = 1800;
+          var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+          if (!w || !h) { done(reject, new Error('empty image')); return; }
+          var k = Math.min(1, max / Math.max(w, h));
+          var cw = Math.max(1, Math.round(w * k)), ch = Math.max(1, Math.round(h * k));
+          var cv = document.createElement('canvas');
+          cv.width = cw; cv.height = ch;
+          var ctx = cv.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, cw, ch);
+          ctx.drawImage(img, 0, 0, cw, ch);
+          var px = ctx.getImageData(0, 0, cw, ch);
+          var d = px.data;
+          for (var i = 0; i < d.length; i += 4) {
+            var g = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+            g = (g - 128) * 1.15 + 128;
+            g = g < 0 ? 0 : (g > 255 ? 255 : g);
+            d[i] = d[i + 1] = d[i + 2] = g;
+          }
+          ctx.putImageData(px, 0, 0);
+          done(resolve, cv);
+        } catch (err) { done(reject, err); }
+      };
+      img.onerror = function () { done(reject, new Error('image load failed')); };
+      img.src = url;
+    });
   }
 
   function openPasteSheet() {
@@ -1228,6 +1354,10 @@
       title: '주문내역 · 영수증 붙여넣기',
       submit: '재고에 담기',
       html:
+        '<div class="ocr-box">' +
+          '<label class="ocr-pick">📷 사진에서 글자 뽑기<input type="file" class="ocr-file" accept="image/*" /></label>' +
+          '<div class="ocr-status" hidden></div>' +
+        '</div>' +
         '<label class="field"><span class="label">영수증이나 주문내역을 그대로 붙여넣으세요</span>' +
           '<textarea class="input" name="raw" rows="5" placeholder="한 줄에 하나씩, 끝에 금액을 넣어 주세요&#10;예)&#10;[대흥] 남해안 생굴 300g  8,590&#10;특란 20구 7,399&#10;참치액 진 500g 3,990"></textarea></label>' +
         '<div class="preview" id="pastePreview"></div>' +
@@ -1260,6 +1390,64 @@
     var preview = wrap.querySelector('#pastePreview');
     var totalEl = wrap.querySelector('#pasteTotal');
     var lastRaw = null;
+
+    /* ── 사진에서 글자 뽑기 (Tesseract.js, 처음 쓸 때만 내려받음) ── */
+    var ocrPick = wrap.querySelector('.ocr-pick');
+    var ocrFile = wrap.querySelector('.ocr-file');
+    var ocrStatus = wrap.querySelector('.ocr-status');
+    var ocrBusy = false;
+
+    function ocrNote(msg, isErr) {
+      ocrStatus.hidden = false;
+      ocrStatus.classList.toggle('err', !!isErr);
+      ocrStatus.textContent = msg;
+    }
+
+    ocrFile.addEventListener('change', function () {
+      var file = ocrFile.files && ocrFile.files[0];
+      if (!file || ocrBusy) return;
+      ocrBusy = true;
+      ocrPick.classList.add('busy');
+      ocrFile.value = '';
+      var worker = null;
+      ocrNote('인식 준비 중…');
+      loadOcrScript()
+        .then(function (T) {
+          return prepareOcrCanvas(file).then(function (canvas) {
+            return T.createWorker('kor+eng', 1, {
+              logger: function (m) {
+                var p = m && typeof m.progress === 'number' ? Math.round(m.progress * 100) : 0;
+                var st = m && m.status ? m.status : '';
+                if (st === 'recognizing text') ocrNote('글자 읽는 중… ' + p + '%');
+                else if (st === 'loading language traineddata') ocrNote('한글 인식 준비 중… ' + p + '%');
+                else if (st) ocrNote('인식 준비 중… ' + p + '%');
+              }
+            }).then(function (w) {
+              worker = w;
+              return w.recognize(canvas);
+            });
+          });
+        })
+        .then(function (res) {
+          var text = normalizeOcrText(res && res.data ? res.data.text : '');
+          if (!text) { ocrNote('사진에서 글자를 찾지 못했어요. 글자가 더 크게 보이는 사진으로 다시 시도해 주세요.', true); return; }
+          var cur = area.value.replace(/\s+$/, '');
+          area.value = cur ? cur + '\n' + text : text;
+          area.dispatchEvent(new Event('input', { bubbles: true }));
+          var found = text.split('\n').filter(function (l) { return parseLine(l); }).length;
+          if (found) ocrNote('글자를 뽑았어요 · ' + found + '건 인식. 아래 미리보기에서 확인해 주세요.');
+          else ocrNote('글자를 뽑았지만 품목 줄을 못 찾았어요. 아래 내용을 직접 고쳐 주세요.', true);
+        })
+        .catch(function (err) {
+          var msg = err && /load|missing/.test(String(err.message)) ? '인식 엔진을 불러오지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.' : '사진을 읽는 중 문제가 생겼어요. 다른 사진으로 다시 시도해 주세요.';
+          ocrNote(msg, true);
+        })
+        .then(function () {
+          if (worker) { try { worker.terminate(); } catch (e) {} }
+          ocrBusy = false;
+          ocrPick.classList.remove('busy');
+        });
+    });
 
     function refreshTotal() {
       var rows = Array.prototype.slice.call(preview.querySelectorAll('.prow'));
