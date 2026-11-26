@@ -210,10 +210,11 @@
   .sactions{display:grid;gap:8px;margin-top:4px}
   .sheet-note{margin:0 0 4px;font-size:12.5px;font-weight:600;line-height:1.65;color:#8A7568;word-break:keep-all}
   .preview{display:flex;flex-direction:column;gap:7px}
-  .prow{display:grid;grid-template-columns:1fr 92px;gap:6px;padding:8px;border:1px solid #F2E7DC;border-radius:12px;background:#FEFBF8}
+  .prow{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:8px;border:1px solid #F2E7DC;border-radius:12px;background:#FEFBF8}
   .prow .pin{border:1px solid #EDE0D3;border-radius:8px;padding:7px 8px;font-family:inherit;font-size:12.5px;font-weight:600;color:#3A2A20;background:#fff;min-width:0}
   .prow .pin:focus{outline:none;border-color:#E3AE86}
-  .prow .amt{text-align:right;font-variant-numeric:tabular-nums}
+  .prow .amt{flex:0 0 104px;width:104px;padding-right:9px;text-align:right;font-variant-numeric:tabular-nums}
+  .prow .rowb .cat{min-width:0;flex:1 1 auto}
   .prow .rowb{display:flex;align-items:center;gap:6px}
   .prow .px{width:26px;height:26px;flex:none;border-radius:8px;border:1px solid #EDE0D3;background:#fff;color:#B39C87;font-size:12px;cursor:pointer}
   .pv-total{font-size:11.5px;font-weight:800;color:#8A7568;text-align:right;margin-top:2px}
