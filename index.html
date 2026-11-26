@@ -1215,7 +1215,8 @@
 
   function isJunkLine(s) {
     if (!s) return true;
-    if (/^\d{1,2}:\d{2}$/.test(s)) return true;                                  // 시간
+    if (!/[가-힣a-zA-Z0-9]/.test(s)) return true;                                  // 기호만 있는 줄
+    if (/\d{1,2}:\d{2}/.test(s)) return true;                                     // 시간
     if (!/[가-힣a-zA-Z]/.test(s) && /^[\d\s,.%:()\-\/+]+$/.test(s)) return true;  // 숫자만 있는 줄(배터리·시계 등)
     if (!/[가-힣]/.test(s) && /\d{2,4}[.\-/]\d{1,2}/.test(s)) return true;        // 날짜
     if (/[*＊]{2,}/.test(s)) return true;                                         // 가려진 번호·주소
@@ -1258,6 +1259,7 @@
     if (!s) return null;
     if (!amount && s.length < 2) return null;
     if (/^(총|합계|소계|계)$/.test(s)) return null;
+    if (!amount && !/[가-힣]/.test(s) && s.replace(/[^A-Za-z0-9]/g, '').length <= 4) return null; // 짧은 영문/숫자 잡음
     if (isJunkName(s)) return null;
     return { name: s, amount: amount * qty, cat: guessCat(s) };
   }
@@ -1275,6 +1277,8 @@
       var l = String(line).replace(/\t/g, ' ').replace(/ {2,}/g, ' ').trim();
       if (!l) { if (out.length && out[out.length - 1] !== '') out.push(''); return; }
       if (/^[-=_*~·•+.\s]+$/.test(l)) return;            // 구분선·점선
+      l = l.replace(/^[^가-힣A-Za-z0-9\[\(]+/, '').trim(); // 앞머리 기호·잡음
+      if (!l) return;
       if (l === '원' && out.length) {                     // 금액 뒤 '원'만 남은 줄
         var w = out.length - 1;
         while (w >= 0 && !out[w]) w--;
