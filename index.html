@@ -1269,70 +1269,34 @@
     return { name: s, amount: amount * qty, cat: guessCat(s) };
   }
 
-  /* OCR 결과 보정: 금액만 떨어진 줄을 앞 품목 줄에 붙이고, 구분선·빈 줄을 정리 */
-  function normalizeOcrText(txt) {
-    var s = String(txt || '')
-      .replace(/\r\n?/g, '\n')
-      .replace(/[\uFF10-\uFF19]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
-      .replace(/[\uFF0C]/g, ',')
-      .replace(/[\u20A9\uFFE6]/g, ' ')
-      .replace(/\u00A0/g, ' ')
-      .replace(/(\d)\.(\d{3})(?!\d)/g, '$1,$2')   // 3.900 → 3,900 (OCR이 쉼표를 점으로 읽은 경우)
-      .replace(/[\[\]{}`]/g, ' ');
-    var out = [];
-    s.split('\n').forEach(function (line) {
-      var l = String(line).replace(/\t/g, ' ').replace(/ {2,}/g, ' ').trim();
-      if (!l) { if (out.length && out[out.length - 1] !== '') out.push(''); return; }
-      if (/^[-=_*~·•+.\s]+$/.test(l)) return;            // 구분선·점선
-      l = l.replace(/^[^가-힣A-Za-z0-9\[\(]+/, '').trim(); // 앞머리 기호·잡음
-      if (!l) return;
-      if (l === '원' && out.length) {                     // 금액 뒤 '원'만 남은 줄
-        var w = out.length - 1;
-        while (w >= 0 && !out[w]) w--;
-        if (w >= 0 && /[0-9]$/.test(out[w])) { out[w] += '원'; return; }
-      }
-      var only = l.replace(/([0-9][0-9,]{2,})\s*원?/g, ' ').replace(/[-+·|]/g, ' ').trim();
-      if (only === '') {                                  // 숫자·금액만 있는 줄
-        var nums = l.match(/[0-9][0-9,]{2,}/g) || [];
-        var p = out.length - 1;
-        while (p >= 0 && !out[p]) p--;
-        if (p >= 0 && nums.length && !/[0-9]\s*원?$/.test(out[p])) { out[p] = out[p] + ' ' + nums[0]; return; }
-        if (p >= 0 && nums.length) return;                // 앞 줄에 이미 금액이 있으면 원가·합계 줄은 버림
-      }
-      out.push(l);
-    });
-    return out.join('\n').replace(/\n{2,}/g, '\n').trim();
+  /* ── 사진 → 품목 (Gemini AI 비전, Supabase Edge Function `receipt-ocr`) ── */
+  var VISION_URL = SUPABASE_URL + '/functions/v1/receipt-ocr';
+
+  /* AI가 돌려준 카테고리 중 앱 목록에 없는 값은 가까운 항목으로 보정 */
+  function normCat(v) {
+    var s = String(v || '').trim();
+    if (CATS.indexOf(s) >= 0) return s;
+    var table = {
+      '간편식·면·빵': '간편식·밀키트', '간편식·면': '간편식·밀키트', '면·빵': '간편식·밀키트',
+      '음료·간식': '음료·차·커피', '음료': '음료·차·커피', '간식': '음료·차·커피',
+      '기타': '상비품·조미료', '채소·과일류': '채소·과일'
+    };
+    if (table[s]) return table[s];
+    for (var i = 0; i < CATS.length; i++) {
+      if (s && (s.indexOf(CATS[i]) >= 0 || CATS[i].indexOf(s) >= 0)) return CATS[i];
+    }
+    return '상비품·조미료';
   }
 
-  var OCR_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-  var ocrScriptPromise = null;
-
-  function loadOcrScript() {
-    if (window.Tesseract) return Promise.resolve(window.Tesseract);
-    if (ocrScriptPromise) return ocrScriptPromise;
-    ocrScriptPromise = new Promise(function (resolve, reject) {
-      var s = document.createElement('script');
-      s.src = OCR_SRC;
-      s.async = true;
-      s.onload = function () {
-        if (window.Tesseract) resolve(window.Tesseract);
-        else { ocrScriptPromise = null; reject(new Error('tesseract missing')); }
-      };
-      s.onerror = function () { ocrScriptPromise = null; reject(new Error('tesseract load failed')); };
-      document.head.appendChild(s);
-    });
-    return ocrScriptPromise;
-  }
-
-  /* 사진을 OCR에 넘기기 좋게 축소(긴 변 1800px)·그레이스케일로 변환 */
-  function prepareOcrCanvas(file) {
+  /* 사진을 AI에 보내기 좋게 축소 (긴 변 1600px JPEG) */
+  function prepareVisionImage(file) {
     return new Promise(function (resolve, reject) {
       var url = URL.createObjectURL(file);
       var img = new Image();
       function done(fn, arg) { URL.revokeObjectURL(url); fn(arg); }
       img.onload = function () {
         try {
-          var max = 1800;
+          var max = 1600;
           var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
           if (!w || !h) { done(reject, new Error('empty image')); return; }
           var k = Math.min(1, max / Math.max(w, h));
@@ -1343,20 +1307,56 @@
           ctx.fillStyle = '#fff';
           ctx.fillRect(0, 0, cw, ch);
           ctx.drawImage(img, 0, 0, cw, ch);
-          var px = ctx.getImageData(0, 0, cw, ch);
-          var d = px.data;
-          for (var i = 0; i < d.length; i += 4) {
-            var g = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
-            g = (g - 128) * 1.15 + 128;
-            g = g < 0 ? 0 : (g > 255 ? 255 : g);
-            d[i] = d[i + 1] = d[i + 2] = g;
-          }
-          ctx.putImageData(px, 0, 0);
-          done(resolve, cv);
+          var dataUrl = cv.toDataURL('image/jpeg', 0.85);
+          done(resolve, { image: dataUrl.slice(dataUrl.indexOf(',') + 1), mimeType: 'image/jpeg' });
         } catch (err) { done(reject, err); }
       };
       img.onerror = function () { done(reject, new Error('image load failed')); };
       img.src = url;
+    });
+  }
+
+  /* 지금 로그인 세션의 액세스 토큰 (만료가 가까우면 supabase-js가 자동 갱신) */
+  function visionToken() {
+    if (!sb || !sb.auth) return Promise.resolve(authSession ? authSession.access_token : null);
+    return sb.auth.getSession().then(function (r) {
+      var s = r && r.data ? r.data.session : null;
+      if (s) authSession = s;
+      return s ? s.access_token : null;
+    }).catch(function () { return authSession ? authSession.access_token : null; });
+  }
+
+  function callReceiptOcr(payload, token) {
+    return fetch(VISION_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok) {
+          var err = new Error((data && data.message) || 'AI 분석에 실패했어요. 사진을 바꿔 다시 시도해 주세요.');
+          err.status = res.status;
+          err.code = data && data.error;
+          throw err;
+        }
+        return data;
+      });
+    });
+  }
+
+  /* 세션이 만료됐으면 한 번 갱신해 다시 시도 */
+  function analyzeImage(image) {
+    return visionToken().then(function (token) {
+      if (!token) { var e = new Error('상단 ☁️ 로그인 후 이용할 수 있어요'); e.code = 'login_required'; throw e; }
+      return callReceiptOcr(image, token).catch(function (err) {
+        if (!err || err.status !== 401 || !sb || !sb.auth || !sb.auth.refreshSession) throw err;
+        return sb.auth.refreshSession().then(function (r) {
+          var s = r && r.data ? r.data.session : null;
+          if (!s) throw err;
+          authSession = s;
+          return callReceiptOcr(image, s.access_token);
+        });
+      });
     });
   }
 
@@ -1402,7 +1402,7 @@
     var totalEl = wrap.querySelector('#pasteTotal');
     var lastRaw = null;
 
-    /* ── 사진에서 글자 뽑기 (Tesseract.js, 처음 쓸 때만 내려받음) ── */
+    /* ── 사진에서 글자 뽑기 (Gemini AI 비전 · 로그인 필요) ── */
     var ocrPick = wrap.querySelector('.ocr-pick');
     var ocrFile = wrap.querySelector('.ocr-file');
     var ocrStatus = wrap.querySelector('.ocr-status');
@@ -1414,50 +1414,62 @@
       ocrStatus.textContent = msg;
     }
 
+    /* AI가 추천한 카테고리를 미리보기 셀렉트에 반영 (품목명으로 짝지음) */
+    function applyAiCats(items) {
+      function key(s) { return String(s || '').replace(/\s+/g, '').toLowerCase(); }
+      var byName = {};
+      items.forEach(function (it) { byName[key(it.name)] = normCat(it.cat); });
+      Array.prototype.slice.call(preview.querySelectorAll('.prow')).forEach(function (row) {
+        var nameEl = row.querySelector('.name'), catEl = row.querySelector('.cat');
+        if (!nameEl || !catEl) return;
+        var cat = byName[key(nameEl.value)];
+        if (cat) catEl.value = cat;
+      });
+    }
+
     ocrFile.addEventListener('change', function () {
       var file = ocrFile.files && ocrFile.files[0];
       if (!file || ocrBusy) return;
       ocrBusy = true;
       ocrPick.classList.add('busy');
       ocrFile.value = '';
-      var worker = null;
-      ocrNote('인식 준비 중…');
-      loadOcrScript()
-        .then(function (T) {
-          return prepareOcrCanvas(file).then(function (canvas) {
-            return T.createWorker('kor+eng', 1, {
-              logger: function (m) {
-                var p = m && typeof m.progress === 'number' ? Math.round(m.progress * 100) : 0;
-                var st = m && m.status ? m.status : '';
-                if (st === 'recognizing text') ocrNote('글자 읽는 중… ' + p + '%');
-                else if (st === 'loading language traineddata') ocrNote('한글 인식 준비 중… ' + p + '%');
-                else if (st) ocrNote('인식 준비 중… ' + p + '%');
-              }
-            }).then(function (w) {
-              worker = w;
-              /* 영수증은 한 줄씩 늘어선 글자 덩어리라 단일 블록 모드가 더 잘 읽히고,
-                 띄어쓰기를 살려야 품목명과 금액이 같은 줄에 남는다 */
-              return w.setParameters({ tessedit_pageseg_mode: '6', preserve_interword_spaces: '1' })
-                .then(function () { return w.recognize(canvas); });
-            });
-          });
+      if (!(authSession && authSession.user)) {
+        ocrNote('상단 ☁️ 로그인 후 이용할 수 있어요', true);
+        ocrBusy = false;
+        ocrPick.classList.remove('busy');
+        return;
+      }
+      ocrNote('사진을 AI에 보내는 중…');
+      prepareVisionImage(file)
+        .then(function (img) {
+          ocrNote('AI가 품목을 읽는 중…');
+          return analyzeImage(img);
         })
-        .then(function (res) {
-          var text = normalizeOcrText(res && res.data ? res.data.text : '');
-          if (!text) { ocrNote('사진에서 글자를 찾지 못했어요. 글자가 더 크게 보이는 사진으로 다시 시도해 주세요.', true); return; }
+        .then(function (data) {
+          var items = (data && data.items) || [];
+          if (!items.length) {
+            ocrNote('사진에서 품목을 찾지 못했어요. 영수증이나 주문내역이 크게 보이는 사진으로 다시 시도해 주세요.', true);
+            return;
+          }
+          var lines = items.map(function (it) {
+            var name = String(it.name || '').trim();
+            var amount = num(it.amount);
+            return amount ? name + ' ' + nf(amount) : name;
+          }).filter(Boolean);
           var cur = area.value.replace(/\s+$/, '');
-          area.value = cur ? cur + '\n' + text : text;
+          area.value = cur ? cur + '\n' + lines.join('\n') : lines.join('\n');
           area.dispatchEvent(new Event('input', { bubbles: true }));
-          var found = text.split('\n').filter(function (l) { return parseLine(l); }).length;
-          if (found) ocrNote('글자를 뽑았어요 · ' + found + '건 인식. 아래 미리보기에서 확인해 주세요.');
-          else ocrNote('글자를 뽑았지만 품목 줄을 못 찾았어요. 아래 내용을 직접 고쳐 주세요.', true);
+          applyAiCats(items);
+          ocrNote('AI가 ' + items.length + '건을 읽었어요 · 아래 미리보기에서 확인해 주세요.');
         })
         .catch(function (err) {
-          var msg = err && /load|missing/.test(String(err.message)) ? '인식 엔진을 불러오지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.' : '사진을 읽는 중 문제가 생겼어요. 다른 사진으로 다시 시도해 주세요.';
+          var msg = err && err.code === 'login_required' ? '상단 ☁️ 로그인 후 이용할 수 있어요'
+            : err && err.status === 401 ? '로그인 세션이 만료됐어요. 상단 ☁️에서 다시 로그인해 주세요.'
+            : err && err.status && err.message ? err.message
+            : '사진을 읽는 중 문제가 생겼어요. 인터넷 연결을 확인하고 다시 시도해 주세요.';
           ocrNote(msg, true);
         })
         .then(function () {
-          if (worker) { try { worker.terminate(); } catch (e) {} }
           ocrBusy = false;
           ocrPick.classList.remove('busy');
         });
